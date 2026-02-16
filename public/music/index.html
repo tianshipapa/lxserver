@@ -1067,6 +1067,110 @@
                                     </label>
                                 </div>
                             </div>
+
+                            <!-- Visual Effects Settings -->
+                            <div class="pt-4 border-t border-gray-100">
+                                <h3 class="font-bold text-gray-800 text-lg mb-4 flex items-center">
+                                    <i class="fas fa-wave-square mr-2 text-emerald-500"></i> 视觉特效 (Visual Effects)
+                                </h3>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <!-- Footer Visualizer -->
+                                    <div
+                                        class="bg-white rounded-xl border border-gray-100 p-4 hover:shadow-sm transition-shadow space-y-4">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <h4 class="text-sm font-bold text-gray-800">底部播放栏 (Footer)</h4>
+                                                <p class="text-xs text-gray-400 mt-1">控制播放栏上方的波形。</p>
+                                            </div>
+                                            <label class="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" id="setting-show-footer-visualizer"
+                                                    class="sr-only peer"
+                                                    onchange="updateSetting('showFooterVisualizer', this.checked)">
+                                                <div
+                                                    class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
+                                                </div>
+                                            </label>
+                                        </div>
+                                        <div>
+                                            <label
+                                                class="block text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wider">显示样式
+                                                (Style)</label>
+                                            <select id="setting-footer-visualizer-style"
+                                                onchange="updateSetting('footerVisualizerStyle', this.value)"
+                                                class="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                                                <option value="bars">条形阵列 (Bars)</option>
+                                                <option value="wave">平滑波浪 (Wave)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <!-- Detail Visualizer -->
+                                    <div
+                                        class="bg-white rounded-xl border border-gray-100 p-4 hover:shadow-sm transition-shadow space-y-4">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <h4 class="text-sm font-bold text-gray-800">详情页背景 (Detail)</h4>
+                                                <p class="text-xs text-gray-400 mt-1">全屏模式下的背景特效。</p>
+                                            </div>
+                                            <label class="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" id="setting-show-detail-visualizer"
+                                                    class="sr-only peer"
+                                                    onchange="updateSetting('showDetailVisualizer', this.checked)">
+                                                <div
+                                                    class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
+                                                </div>
+                                            </label>
+                                        </div>
+                                        <div class="pt-2 border-t border-gray-50">
+                                            <label
+                                                class="block text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wider">显示样式
+                                                (Style)</label>
+                                            <select id="setting-detail-visualizer-style"
+                                                onchange="updateSetting('detailVisualizerStyle', this.value)"
+                                                class="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                                                <option value="pulse">频率脉冲 (Pulse)</option>
+                                                <option value="dots">点阵频谱 (Dots)</option>
+                                                <option value="flower">灵动莲花 (Flower)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Global Visualizer Settings -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                                    <!-- Global Opacity -->
+                                    <div
+                                        class="bg-white rounded-xl border border-gray-100 p-4 hover:shadow-sm transition-shadow">
+                                        <label
+                                            class="block text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider">全局透明度
+                                            (Opacity)</label>
+                                        <div class="flex items-center gap-4">
+                                            <input type="range" id="setting-visualizer-opacity"
+                                                class="flex-1 h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                                min="0.1" max="1.0" step="0.1" value="0.5"
+                                                oninput="updateSetting('visualizerOpacity', parseFloat(this.value))">
+                                            <span id="visualizer-opacity-value"
+                                                class="text-sm font-mono text-emerald-600 font-bold w-10 text-right">0.5</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Global Style (Blocks vs Connected) -->
+                                    <div
+                                        class="bg-white rounded-xl border border-gray-100 p-4 hover:shadow-sm transition-shadow">
+                                        <label
+                                            class="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider">渲染风格
+                                            (Global Style)</label>
+                                        <select id="setting-visualizer-global-style"
+                                            onchange="updateSetting('visualizerGlobalStyle', this.value)"
+                                            class="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                                            <option value="blocks">方块样式 (Blocks)</option>
+                                            <option value="connected">连体样式 (Connected)</option>
+                                        </select>
+                                        <p class="text-[10px] text-gray-400 mt-2 italic">※ 此风格主要影响条形阵列和频率脉冲效果。</p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Logic Settings Panel -->
@@ -1143,65 +1247,64 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Logs Settings Panel -->
+                        <div id="settings-panel-logs" class="hidden space-y-6 animate-fade-in h-96 flex flex-col">
+                            <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+                                <h3 class="font-bold text-gray-800 text-lg flex items-center">
+                                    <i class="fas fa-terminal mr-2 text-emerald-500"></i> 系统日志 (System Logs)
+                                </h3>
+                                <div class="flex gap-2 flex-shrink-0">
+                                    <button onclick="window.clearSystemLogs && window.clearSystemLogs()"
+                                        class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs transition-colors whitespace-nowrap"
+                                        title="清空日志">
+                                        <i class="fas fa-trash-alt mr-1"></i>清空
+                                    </button>
+                                    <button onclick="window.renderSystemLogs && window.renderSystemLogs()"
+                                        class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg text-xs transition-colors whitespace-nowrap"
+                                        title="刷新">
+                                        <i class="fas fa-sync-alt mr-1"></i>刷新
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div
+                                class="flex-1 bg-gray-900 rounded-xl border border-gray-800 p-4 font-mono text-xs overflow-hidden flex flex-col shadow-inner">
+                                <div id="system-log-container"
+                                    class="flex-1 overflow-y-auto custom-scrollbar space-y-1 bg-gray-900 text-gray-300">
+                                    <div class="text-gray-500 italic text-center py-4">暂无日志...</div>
+                                </div>
+                            </div>
+                            <div class="text-[10px] text-gray-400 text-right">
+                                * 显示系统启动后的 Console 输出
+                            </div>
+                        </div>
                     </div>
-
-                    <!-- Logs Settings Panel -->
-                    <div id="settings-panel-logs" class="hidden space-y-6 animate-fade-in h-96 flex flex-col">
-                        <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
-                            <h3 class="font-bold text-gray-800 text-lg flex items-center">
-                                <i class="fas fa-terminal mr-2 text-emerald-500"></i> 系统日志 (System Logs)
-                            </h3>
-                            <div class="flex gap-2 flex-shrink-0">
-                                <button onclick="window.clearSystemLogs && window.clearSystemLogs()"
-                                    class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs transition-colors whitespace-nowrap"
-                                    title="清空日志">
-                                    <i class="fas fa-trash-alt mr-1"></i>清空
-                                </button>
-                                <button onclick="window.renderSystemLogs && window.renderSystemLogs()"
-                                    class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg text-xs transition-colors whitespace-nowrap"
-                                    title="刷新">
-                                    <i class="fas fa-sync-alt mr-1"></i>刷新
-                                </button>
-                            </div>
+                </div>
+                <!-- About View -->
+                <div id="view-about"
+                    class="absolute inset-0 overflow-y-auto custom-scrollbar px-6 pt-6 pb-32 hidden opacity-0 transition-all duration-300">
+                    <div
+                        class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 max-w-3xl mx-auto w-full prose prose-emerald">
+                        <div id="about-content" class="animate-pulse">
+                            <div class="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
+                            <div class="h-4 bg-gray-200 rounded w-full mb-2"></div>
+                            <div class="h-4 bg-gray-200 rounded w-full mb-2"></div>
+                            <div class="h-4 bg-gray-200 rounded w-2/3"></div>
                         </div>
 
-                        <div
-                            class="flex-1 bg-gray-900 rounded-xl border border-gray-800 p-4 font-mono text-xs overflow-hidden flex flex-col shadow-inner">
-                            <div id="system-log-container"
-                                class="flex-1 overflow-y-auto custom-scrollbar space-y-1 bg-gray-900 text-gray-300">
-                                <div class="text-gray-500 italic text-center py-4">暂无日志...</div>
-                            </div>
-                        </div>
-                        <div class="text-[10px] text-gray-400 text-right">
-                            * 显示系统启动后的 Console 输出
+                        <!-- Check for Updates Button -->
+                        <div class="mt-8 pt-8 border-t border-gray-100 flex flex-col items-center gap-4">
+                            <button onclick="checkForUpdates()"
+                                class="flex items-center gap-2 px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-100 transition-all hover:scale-105 active:scale-95 text-sm font-bold group">
+                                <i class="fas fa-sync-alt group-hover:rotate-180 transition-transform duration-500"></i>
+                                检查版本更新
+                            </button>
+                            <p class="text-xs text-gray-400">点击通过云端检查是否有新版本可用</p>
                         </div>
                     </div>
                 </div>
             </div>
-            <!-- About View -->
-            <div id="view-about"
-                class="absolute inset-0 overflow-y-auto custom-scrollbar px-6 pt-6 pb-32 hidden opacity-0 transition-all duration-300">
-                <div
-                    class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 max-w-3xl mx-auto w-full prose prose-emerald">
-                    <div id="about-content" class="animate-pulse">
-                        <div class="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
-                        <div class="h-4 bg-gray-200 rounded w-full mb-2"></div>
-                        <div class="h-4 bg-gray-200 rounded w-full mb-2"></div>
-                        <div class="h-4 bg-gray-200 rounded w-2/3"></div>
-                    </div>
-
-                    <!-- Check for Updates Button -->
-                    <div class="mt-8 pt-8 border-t border-gray-100 flex flex-col items-center gap-4">
-                        <button onclick="checkForUpdates()"
-                            class="flex items-center gap-2 px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-100 transition-all hover:scale-105 active:scale-95 text-sm font-bold group">
-                            <i class="fas fa-sync-alt group-hover:rotate-180 transition-transform duration-500"></i>
-                            检查版本更新
-                        </button>
-                        <p class="text-xs text-gray-400">点击通过云端检查是否有新版本可用</p>
-                    </div>
-                </div>
-            </div>
-    </div>
     </div>
     </div>
 
@@ -1216,6 +1319,9 @@
             <img id="detail-bg-cover" src=""
                 class="w-full h-full object-cover filter blur-[60px] opacity-40 scale-125 transition-opacity duration-1000">
             <div class="absolute inset-0 bg-white/30 backdrop-blur-3xl"></div>
+            <!-- Detail Visualizer Canvas (Raised to avoid being blocked by footer) -->
+            <canvas id="detail-visualizer"
+                class="absolute bottom-24 left-0 w-full h-[calc(100vh-6rem)] pointer-events-none opacity-30"></canvas>
         </div>
 
         <!-- Navbar / Controls -->
@@ -1322,13 +1428,22 @@
             class="flex-1 flex flex-col items-center justify-center max-w-2xl mx-auto w-full px-0 md:px-4 order-last md:order-none">
 
             <!-- Progress Bar (Moved up for better mobile layout) -->
-            <div class="w-full flex items-center gap-2 md:gap-3 text-xs text-gray-400 font-mono mb-2 md:mb-0">
+            <div
+                class="w-full flex items-center gap-2 md:gap-3 text-xs text-gray-400 font-mono mb-2 md:mb-0 relative py-1">
                 <span id="time-current">00:00</span>
-                <div class="flex-1 bg-gray-200 rounded-full h-1.5 cursor-pointer relative group" id="progress-container"
-                    onclick="seek(event)">
-                    <div id="progress-bar" class="bg-emerald-500 h-full rounded-full w-0 relative">
-                        <div
-                            class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white border border-gray-200 rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity">
+                <div class="flex-1 h-8 flex items-center relative group">
+                    <!-- Footer Info/Visualizer Canvas (Moved to match progress bar width) -->
+                    <div id="visualizer-container"
+                        class="absolute bottom-6 left-0 w-full h-12 pointer-events-none overflow-hidden flex justify-center items-end transition-all duration-300">
+                        <canvas id="footer-visualizer" class="h-full opacity-40"></canvas>
+                    </div>
+
+                    <div class="w-full bg-gray-200 rounded-full h-1.5 cursor-pointer relative z-10"
+                        id="progress-container" onclick="seek(event)">
+                        <div id="progress-bar" class="bg-emerald-500 h-full rounded-full w-0 relative">
+                            <div
+                                class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white border border-gray-200 rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1649,7 +1764,7 @@
     </div>
 
     <!-- Audio Element -->
-    <audio id="audio-player"></audio>
+    <audio id="audio-player" crossorigin="anonymous"></audio>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
     <script src="/music/js/log_viewer.js"></script>
     <script src="/music/js/lyric-utils.js"></script>
@@ -1659,6 +1774,8 @@
     <script src="/music/js/batch_pagination.js"></script>
     <script src="/music/js/single_song_ops.js"></script>
     <script src="/music/js/theme_manager.js"></script>
+    <script src="/music/js/wave.js"></script>
+    <script src="/music/js/visualizer.js"></script>
     <script src="/music/js/pwa.js"></script>
     <script src="/music/app.js"></script>
 </body>

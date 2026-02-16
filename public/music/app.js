@@ -48,7 +48,14 @@ let settings = {
     enableCrossfade: true, // 音频淡入淡出
     showLyricTranslation: true, // 显示歌词翻译
     showLyricRoma: false, // 显示歌词罗马音
-    swapLyricTransRoma: false // 交换翻译与罗马音位置
+    swapLyricTransRoma: false, // 交换翻译与罗马音位置
+    // Visualizer Settings (Refactored)
+    showFooterVisualizer: true,
+    footerVisualizerStyle: 'bars',
+    showDetailVisualizer: true,
+    detailVisualizerStyle: 'pulse',
+    visualizerOpacity: 0.5,
+    visualizerGlobalStyle: 'blocks'
 };
 
 // 歌词原始数据，用于设置切换时重新渲染
@@ -65,6 +72,7 @@ try {
 } catch (e) {
     console.error('[Settings] 加载设置失败:', e);
 }
+window.settings = settings; // 显式挂载到 window
 
 let batchMode = false;
 let selectedItems = new Set(); // Set of item IDs
@@ -1717,6 +1725,15 @@ audio.addEventListener('play', () => {
         navigator.mediaSession.playbackState = 'playing';
         updatePositionState();
     }
+
+    // [Fix] 这里的状态更新确保 UI 与实际播放状态同步 (e.g. 键盘媒体键控制)
+    if (currentQuality) {
+        setPlayerStatus(`播放中 (${window.QualityManager.getQualityDisplayName(currentQuality)})`);
+    } else {
+        setPlayerStatus('播放中');
+    }
+    updatePlayButton(true);
+
     // [Fix] 歌曲播放时自动同步歌词，并强制进入自动滚动模式
     if (lyricPlayer) {
         lyricPlayer.play(audio.currentTime * 1000);
@@ -1737,6 +1754,15 @@ audio.addEventListener('pause', () => {
         navigator.mediaSession.playbackState = 'paused';
         updatePositionState();
     }
+
+    // [Fix] 这里的状态更新确保 UI 与实际播放状态同步
+    if (currentQuality) {
+        setPlayerStatus(`暂停中 (${window.QualityManager.getQualityDisplayName(currentQuality)})`);
+    } else {
+        setPlayerStatus('暂停中');
+    }
+    updatePlayButton(false);
+
     if (lyricPlayer) {
         lyricPlayer.pause();
     }
@@ -2236,6 +2262,13 @@ function updateSetting(key, value) {
     }
     // 实时同步 UI 并应用效果
     syncSettingsUI(key, value);
+
+    // Special handlers for visual changes
+    if (key.includes('Visualizer')) {
+        if (window.musicVisualizer) {
+            window.musicVisualizer.applySettings();
+        }
+    }
 }
 
 function syncSettingsUI(key = null, value = null) {
@@ -2280,6 +2313,39 @@ function syncSettingsUI(key = null, value = null) {
                 applyLyricUpdate();
             }
         }
+
+        if (key === 'showFooterVisualizer') {
+            const check = document.getElementById('setting-show-footer-visualizer');
+            if (check) check.checked = value;
+        }
+
+        if (key === 'footerVisualizerStyle') {
+            const select = document.getElementById('setting-footer-visualizer-style');
+            if (select) select.value = value;
+        }
+
+        if (key === 'showDetailVisualizer') {
+            const check = document.getElementById('setting-show-detail-visualizer');
+            if (check) check.checked = value;
+        }
+
+        if (key === 'detailVisualizerStyle') {
+            const select = document.getElementById('setting-detail-visualizer-style');
+            if (select) select.value = value;
+        }
+
+        if (key === 'visualizerOpacity') {
+            const range = document.getElementById('setting-visualizer-opacity');
+            const valueDisplay = document.getElementById('visualizer-opacity-value');
+            if (range) range.value = value;
+            if (valueDisplay) valueDisplay.innerText = value;
+        }
+
+        if (key === 'visualizerGlobalStyle') {
+            const select = document.getElementById('setting-visualizer-global-style');
+            if (select) select.value = value;
+        }
+
         // 如果有其他需要实时更新的设置，可以在这里添加
         return;
     }
@@ -2295,6 +2361,26 @@ function syncSettingsUI(key = null, value = null) {
     if (autoResume) {
         autoResume.checked = settings.autoResume !== false;
     }
+
+    const visOpacity = document.getElementById('setting-visualizer-opacity');
+    const visOpacityVal = document.getElementById('visualizer-opacity-value');
+    if (visOpacity) visOpacity.value = settings.visualizerOpacity || 0.5;
+    if (visOpacityVal) visOpacityVal.innerText = settings.visualizerOpacity || 0.5;
+
+    const showFooterVis = document.getElementById('setting-show-footer-visualizer');
+    if (showFooterVis) showFooterVis.checked = settings.showFooterVisualizer !== false;
+
+    const footerVisStyle = document.getElementById('setting-footer-visualizer-style');
+    if (footerVisStyle) footerVisStyle.value = settings.footerVisualizerStyle || 'bars';
+
+    const globalVisStyle = document.getElementById('setting-visualizer-global-style');
+    if (globalVisStyle) globalVisStyle.value = settings.visualizerGlobalStyle || 'blocks';
+
+    const showDetailVis = document.getElementById('setting-show-detail-visualizer');
+    if (showDetailVis) showDetailVis.checked = settings.showDetailVisualizer !== false;
+
+    const detailVisStyle = document.getElementById('setting-detail-visualizer-style');
+    if (detailVisStyle) detailVisStyle.value = settings.detailVisualizerStyle || 'pulse';
 
     const showSidebar = document.getElementById('setting-show-sidebar-info');
     if (showSidebar) {
@@ -2429,10 +2515,17 @@ function toggleLyrics() {
             }
             setTimeout(() => scrollToActiveLine(true), 100);
         }
+
+        // Notify visualizer to switch canvas
+        setTimeout(() => {
+            if (window.musicVisualizer) window.musicVisualizer.applySettings();
+        }, 300);
     } else {
         view.classList.add('translate-y-[100%]', 'opacity-0');
         setTimeout(() => {
             view.classList.add('hidden');
+            // Notify visualizer to switch back to footer
+            if (window.musicVisualizer) window.musicVisualizer.applySettings();
         }, 500); // match transition duration
     }
 }

@@ -1,7 +1,16 @@
 # Changelog
 <br>
 
-## v1.3.3 (2026-02-16)
+## v1.4.0 (2026-02-16)
+
+### 🌟 新增功能
+
+- **Web 播放器**:
+  - **音频可视化**: 引入了全新的音频可视化功能，支持在底部播放栏和详情页展示动态的频谱效果。
+    - **多种样式**: 底部播放栏支持“条形队列”和“声波曲线”；详情页支持“频率脉冲”、“点阵球”和“曼陀罗花”。
+    - **高度可定制**: 支持调节全局透明度、颜色跟随主题，通过“全局样式”可切换“方块样式 (Blocks)”与“连体样式 (Connected)”。特别针对“方块样式”进行了深度优化，实现了完美的像素级堆叠和全宽居中效果。
+  - ![v1.4.0 Visualizer Footer](/md/log/1.4.0-0.png)
+  - ![v1.4.0 Visualizer Detail](/md/log/1.4.0-1.png)
 
 ### 🌟 优化
 
@@ -9,6 +18,19 @@
   - **服务端缓存控制**: 增强了静态资源请求头。现在所有 HTML、JS、CSS 资源都会携带 `ETag` 和 `Last-Modified` 标识，并设置 `Cache-Control: no-cache`。这强制浏览器在每次加载前验证文件变动，彻底解决了更新代码后用户需要“清除浏览器缓存”或“强行刷新”才能看到效果的问题。
   - **Service Worker 策略调整**: 将管理控制台与音乐播放器的 Service Worker 策略从“缓存优先 (Cache-First)”调整为 **“网络优先 (Network-First)”**。在有网络时优先获取最新代码，无网络时自动回退到离线缓存，兼顾了更新的实时性与离线可用性。
   - **即时激活更新**: 在 Service Worker 更新后加入自动跳过等待 (`skipWaiting`) 并立即接管页面 (`clients.claim`) 的逻辑。现在新版本发布后，刷新页面即可立即生效，无需关闭所有相关标签页。
+
+### 🔧 修复
+
+- **服务端兼容性**:
+  - **Node.js 旧版本适配**: 修复了在 Node.js v21.0.0 以下版本（如 v20, v18, v16）中，部分加密/签名脚本（如 `infSign.min.js`）访问 `navigator` 对象时抛出 `ReferenceError: navigator is not defined` 的问题。
+  - **解决方案**: 在全局作用域手动注入了 `navigator` Polyfill：
+    ```javascript
+    if (typeof (global as any).navigator === 'undefined') {
+      (global as any).navigator = { userAgent: 'node.js' }
+    }
+    ```
+    此变动确保了旧版本 Node.js 环境下的脚本兼容性。
+  - **UI 界面修复**: 修复并优化了“系统日志”、“关于”及“设置”等区域的 UI 样式，解决了部分布局错位与显示异常的问题，提升了整体视觉一致性。
 
 ## v1.3.2 (2026-02-16)
 

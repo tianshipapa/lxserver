@@ -24,6 +24,11 @@ function setTheme(themeName, save = true) {
         console.log(`[Theme] Applied: ${themeName}`);
     }
 
+    // 更新可视化颜色 (如果加载了可视化脚本)
+    if (window.musicVisualizer && typeof window.musicVisualizer.applySettings === 'function') {
+        window.musicVisualizer.applySettings();
+    }
+
     // Update UI (Checkmarks and Highlights)
     updateThemeSelectionUI(themeName);
 }
