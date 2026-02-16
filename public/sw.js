@@ -14,6 +14,7 @@ self.addEventListener('install', (event) => {
             return cache.addAll(ASSETS_TO_CACHE);
         })
     );
+    self.skipWaiting();
 });
 
 self.addEventListener('fetch', (event) => {
@@ -31,37 +32,30 @@ self.addEventListener('fetch', (event) => {
     if (url.origin !== location.origin) return;
 
     event.respondWith(
-        caches.match(event.request).then((cachedResponse) => {
-            // Return cached response if found
-            if (cachedResponse) {
-                return cachedResponse;
-            }
-
-            // Otherwise fetch from network
-            return fetch(event.request).then((response) => {
-                // Check if we received a valid response
-                if (!response || response.status !== 200 || response.type !== 'basic') {
-                    return response;
+        fetch(event.request)
+            .then((response) => {
+                // 如果请求成功，更新缓存并返回
+                if (response && response.status === 200 && response.type === 'basic') {
+                    const responseToCache = response.clone();
+                    caches.open(CACHE_NAME).then((cache) => {
+                        cache.put(event.request, responseToCache);
+                    });
                 }
-
-                // Clone the response
-                const responseToCache = response.clone();
-
-                caches.open(CACHE_NAME).then((cache) => {
-                    cache.put(event.request, responseToCache);
-                });
-
                 return response;
+            })
+            .catch(() => {
+                // 网络不可用时，尝试从缓存获取
+                return caches.match(event.request).then((cachedResponse) => {
+                    if (cachedResponse) return cachedResponse;
+                    throw new Error('Network failed and no cache available');
+                });
             }).catch((error) => {
-                // Network fetch failed, log and return error
                 console.error('[SW] Fetch failed:', event.request.url, error);
-                // Return a basic error response instead of throwing
                 return new Response('Network error', {
                     status: 408,
                     statusText: 'Request Timeout'
                 });
-            });
-        })
+            })
     );
 });
 
@@ -77,4 +71,5 @@ self.addEventListener('activate', (event) => {
             );
         })
     );
+    self.clients.claim();
 });

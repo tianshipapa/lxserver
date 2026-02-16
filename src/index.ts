@@ -9,6 +9,10 @@ moduleAlias.addAliases({
   '@': __dirname
 })
 
+if (typeof (global as any).navigator === 'undefined') {
+  (global as any).navigator = { userAgent: 'node.js' }
+}
+
 import { initLogger } from '@/utils/log4js'
 import defaultConfig from './defaultConfig'
 import { ENV_PARAMS, File } from './constants'

@@ -213,23 +213,51 @@ const readBody = async (req: IncomingMessage) => await new Promise<string>((reso
 })
 
 const serveStatic = (req: IncomingMessage, res: http.ServerResponse, filePath: string) => {
-  // 直接使用 getMime 函数获取正确的 Content-Type (支持 .svg 等更多格式)
   const contentType = getMime(filePath)
 
-  fs.readFile(filePath, (err, content) => {
-    if (err) {
-      if (err.code === 'ENOENT') {
-        res.writeHead(404)
-        res.end('Not Found')
-      } else {
-        res.writeHead(500)
-        res.end('Server Error')
-      }
-    } else {
-      res.writeHead(200, { 'Content-Type': contentType })
-      res.end(content, 'utf-8')
+  try {
+    const stats = fs.statSync(filePath)
+    const mtime = stats.mtime.getTime()
+    const etag = `W/"${stats.size}-${mtime}"`
+    const lastModified = stats.mtime.toUTCString()
+
+    // Check Cache Validity (Conditional Requests)
+    if (req.headers['if-none-match'] === etag || req.headers['if-modified-since'] === lastModified) {
+      res.writeHead(304)
+      res.end()
+      return
     }
-  })
+
+    fs.readFile(filePath, (err, content) => {
+      if (err) {
+        if (err.code === 'ENOENT') {
+          res.writeHead(404)
+          res.end('Not Found')
+        } else {
+          res.writeHead(500)
+          res.end('Server Error')
+        }
+      } else {
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'ETag': etag,
+          'Last-Modified': lastModified,
+          'Cache-Control': 'no-cache, must-revalidate', // Force browser to revalidate every time
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        })
+        res.end(content, 'utf-8')
+      }
+    })
+  } catch (err: any) {
+    if (err.code === 'ENOENT') {
+      res.writeHead(404)
+      res.end('Not Found')
+    } else {
+      res.writeHead(500)
+      res.end('Server Error')
+    }
+  }
 }
 
 const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Promise((resolve, reject) => {

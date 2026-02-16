@@ -23,15 +23,29 @@ self.addEventListener('install', (event) => {
             return cache.addAll(ASSETS_TO_CACHE);
         })
     );
+    self.skipWaiting();
 });
 
 self.addEventListener('fetch', (event) => {
+    // 采用 Network First 策略，确保在线时获取最新版本，离线时使用缓存
+    if (event.request.method !== 'GET') return;
+
     event.respondWith(
-        caches.match(event.request).then((response) => {
-            return response || fetch(event.request).catch(() => {
-                // Fallback or specific handling if needed
-            });
-        })
+        fetch(event.request)
+            .then((response) => {
+                // 如果请求成功，更新缓存并返回
+                if (response && response.status === 200 && response.type === 'basic') {
+                    const responseToCache = response.clone();
+                    caches.open(CACHE_NAME).then((cache) => {
+                        cache.put(event.request, responseToCache);
+                    });
+                }
+                return response;
+            })
+            .catch(() => {
+                // 网络不可用时，尝试从缓存获取
+                return caches.match(event.request);
+            })
     );
 });
 
@@ -47,4 +61,5 @@ self.addEventListener('activate', (event) => {
             );
         })
     );
+    self.clients.claim();
 });
