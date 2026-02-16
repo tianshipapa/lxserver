@@ -1006,6 +1006,67 @@
                                     </label>
                                 </div>
                             </div>
+
+                            <!-- Lyric Translation Toggle -->
+                            <div
+                                class="bg-white rounded-xl border border-gray-100 p-4 hover:shadow-sm transition-shadow">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h4 class="text-sm font-bold text-gray-800">显示歌词翻译 (Show Translation)</h4>
+                                        <p class="text-xs text-gray-400 mt-1">
+                                            如果歌曲有翻译，则在原词下方显示。
+                                        </p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="setting-show-lyric-translation" class="sr-only peer"
+                                            onchange="updateSetting('showLyricTranslation', this.checked)">
+                                        <div
+                                            class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Lyric Roma Toggle -->
+                            <div
+                                class="bg-white rounded-xl border border-gray-100 p-4 hover:shadow-sm transition-shadow">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h4 class="text-sm font-bold text-gray-800">显示歌词罗马音 (Show Romanization)</h4>
+                                        <p class="text-xs text-gray-400 mt-1">
+                                            如果歌曲有罗马音，则在原词下方显示。
+                                        </p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="setting-show-lyric-roma" class="sr-only peer"
+                                            onchange="updateSetting('showLyricRoma', this.checked)">
+                                        <div
+                                            class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Swap Trans Roma Toggle -->
+                            <div
+                                class="bg-white rounded-xl border border-gray-100 p-4 hover:shadow-sm transition-shadow">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h4 class="text-sm font-bold text-gray-800">交换翻译与罗马音位置 (Swap Translation & Roma)
+                                        </h4>
+                                        <p class="text-xs text-gray-400 mt-1">
+                                            开启后，罗马音将显示在翻译上方。
+                                        </p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="setting-swap-lyric-trans-roma" class="sr-only peer"
+                                            onchange="updateSetting('swapLyricTransRoma', this.checked)">
+                                        <div
+                                            class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Logic Settings Panel -->

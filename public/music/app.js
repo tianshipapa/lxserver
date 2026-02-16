@@ -45,8 +45,16 @@ let settings = {
     switchPlaylistOnSearchPlay: true, // 播放搜索歌曲时切换歌单 (默认开启)
     autoResume: true, // 自动恢复进度 (默认开启)
     showSidebarSongInfo: true, // 展示侧边栏封面
-    enableCrossfade: true // 音频淡入淡出
+    enableCrossfade: true, // 音频淡入淡出
+    showLyricTranslation: true, // 显示歌词翻译
+    showLyricRoma: false, // 显示歌词罗马音
+    swapLyricTransRoma: false // 交换翻译与罗马音位置
 };
+
+// 歌词原始数据，用于设置切换时重新渲染
+let currentRawLrc = '';
+let currentRawTlrc = '';
+let currentRawRlrc = '';
 
 // 从 localStorage 加载设置
 try {
@@ -2257,6 +2265,21 @@ function syncSettingsUI(key = null, value = null) {
             const check = document.getElementById('setting-enable-crossfade');
             if (check) check.checked = value;
         }
+
+        if (['showLyricTranslation', 'showLyricRoma', 'swapLyricTransRoma'].includes(key)) {
+            const idMap = {
+                showLyricTranslation: 'setting-show-lyric-translation',
+                showLyricRoma: 'setting-show-lyric-roma',
+                swapLyricTransRoma: 'setting-swap-lyric-trans-roma'
+            };
+            const check = document.getElementById(idMap[key]);
+            if (check) check.checked = value;
+
+            // 实时应用：如果当前有播放中的歌词，则重新设置
+            if (lyricPlayer && currentRawLrc) {
+                applyLyricUpdate();
+            }
+        }
         // 如果有其他需要实时更新的设置，可以在这里添加
         return;
     }
@@ -2292,6 +2315,16 @@ function syncSettingsUI(key = null, value = null) {
     if (crossfade) {
         crossfade.checked = settings.enableCrossfade !== false;
     }
+
+    // 歌词设置同步
+    const lrcTrans = document.getElementById('setting-show-lyric-translation');
+    if (lrcTrans) lrcTrans.checked = settings.showLyricTranslation !== false;
+
+    const lrcRoma = document.getElementById('setting-show-lyric-roma');
+    if (lrcRoma) lrcRoma.checked = settings.showLyricRoma === true;
+
+    const lrcSwap = document.getElementById('setting-swap-lyric-trans-roma');
+    if (lrcSwap) lrcSwap.checked = settings.swapLyricTransRoma === true;
 
     // 其他设置项同步 (如需扩展可以加在这里)
     const qualitySelect = document.getElementById('quality-select');
@@ -2473,10 +2506,11 @@ async function fetchLyric(song) {
         }
 
         const data = await res.json();
-        const lrc = data.lyric || data.lrc || '';
-        const tlyric = data.tlyric || '';
+        currentRawLrc = data.lyric || data.lrc || '';
+        currentRawTlrc = data.tlyric || '';
+        currentRawRlrc = data.rlyric || '';
 
-        if (!lrc) {
+        if (!currentRawLrc) {
             renderLyric([]);
             return;
         }
@@ -2503,20 +2537,42 @@ async function fetchLyric(song) {
             });
         }
 
-        // Set lyric with translation as extended lyric
-        const extendedLyrics = [];
-        if (tlyric) extendedLyrics.push(tlyric);
-
-        lyricPlayer.setLyric(lrc, extendedLyrics);
-
-        // Start playing if audio is already playing
-        if (!audio.paused && audio.currentTime > 0) {
-            lyricPlayer.play(audio.currentTime * 1000);
-        }
+        applyLyricUpdate();
 
     } catch (e) {
         console.error('[Lyric] Failed:', e);
         renderLyric([], '暂无歌词');
+    }
+}
+
+// 辅助函数：根据当前设置应用歌词更新
+function applyLyricUpdate() {
+    if (!lyricPlayer || !currentRawLrc) return;
+
+    const extendedLyrics = [];
+    const showTrans = settings.showLyricTranslation !== false;
+    const showRoma = settings.showLyricRoma === true;
+    const isSwap = settings.swapLyricTransRoma === true;
+
+    if (showTrans && currentRawTlrc && showRoma && currentRawRlrc) {
+        if (isSwap) {
+            extendedLyrics.push(currentRawRlrc);
+            extendedLyrics.push(currentRawTlrc);
+        } else {
+            extendedLyrics.push(currentRawTlrc);
+            extendedLyrics.push(currentRawRlrc);
+        }
+    } else if (showTrans && currentRawTlrc) {
+        extendedLyrics.push(currentRawTlrc);
+    } else if (showRoma && currentRawRlrc) {
+        extendedLyrics.push(currentRawRlrc);
+    }
+
+    lyricPlayer.setLyric(currentRawLrc, extendedLyrics);
+
+    // Start playing if audio is already playing
+    if (!audio.paused && audio.currentTime > 0) {
+        lyricPlayer.play(audio.currentTime * 1000);
     }
 }
 
@@ -2821,12 +2877,15 @@ function renderLyric(lines, emptyMsg = '暂无歌词') {
         span.textContent = line.text;
         contentDiv.appendChild(span);
 
-        // Translation (if available)
-        if (line.trans) {
-            const transSpan = document.createElement('span');
-            transSpan.className = 'extended text-sm md:text-base text-gray-400 mt-1 block';
-            transSpan.textContent = line.trans;
-            contentDiv.appendChild(transSpan);
+        // Extended Lyrics (Translation, Romanization, etc.)
+        if (line.extendedLyrics && line.extendedLyrics.length > 0) {
+            line.extendedLyrics.forEach(extText => {
+                if (!extText) return;
+                const extSpan = document.createElement('span');
+                extSpan.className = 'extended text-sm md:text-base text-gray-400 mt-1 block';
+                extSpan.textContent = extText;
+                contentDiv.appendChild(extSpan);
+            });
         }
 
         div.appendChild(contentDiv);
