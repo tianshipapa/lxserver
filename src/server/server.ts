@@ -86,11 +86,15 @@ const normalizeSongInfo = (songInfo: any) => {
     case 'tx': // 腾讯
       // 关键：strMediaMid (获取链接), songId (数字 ID，用于评论)
       if (!songInfo.strMediaMid && songInfo.meta?.strMediaMid) songInfo.strMediaMid = songInfo.meta.strMediaMid
-      if (!songInfo.songId && songInfo.meta?.songId) songInfo.songId = songInfo.meta.songId
       if (!songInfo.albumMid && songInfo.meta?.albumMid) songInfo.albumMid = songInfo.meta.albumMid
 
-      // Fallback: 如果没有 songId 但有 songmid (通常是数字或者字母 ID)
-      if (!songInfo.songId) songInfo.songId = songInfo.songmid
+      // 只有当 meta 中的 songId 是纯数字时才回填，否则保持 undefined 触发 SDK 自动获取
+      const metaSongId = String(songInfo.meta?.songId || '')
+      if (/^\d+$/.test(metaSongId)) {
+        songInfo.songId = metaSongId
+      } else {
+        delete songInfo.songId
+      }
       break
 
     case 'mg': // 咪咕
