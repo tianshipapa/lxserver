@@ -1134,8 +1134,8 @@ async function checkServerCache(song, quality) {
             name: song.name,
             singer: song.singer,
             source: song.source,
-            songmid: song.songmid || '',
-            songId: song.songId || song.id,
+            songmid: song.songmid || (song.meta && (song.meta.songmid || song.meta.songId)) || '',
+            songId: song.songId || (song.meta && song.meta.songId) || song.id,
             quality: quality || ''
         });
         const headers = {};
@@ -1256,7 +1256,9 @@ async function playSong(song, index, forceQuality = null, noPlay = false, isRetr
 
         // ===== 尝试读取缓存链接 =====
         const cleanedSong = cleanSongData(song);
-        const cacheKey = `lx_url_v3_${cleanedSong.id}_${quality}`; // v3 for standardized ID
+        const cacheKey = `lx_url_${cleanedSong.id}_${quality}`; // 使用统一前缀
+
+        // 只在非重试请求中首先尝试链接缓存
         if (!isRetry && settings.enableSongUrlCache !== false && !forceQuality) {
             const cachedUrl = localStorage.getItem(cacheKey);
             if (cachedUrl) {
@@ -1273,12 +1275,12 @@ async function playSong(song, index, forceQuality = null, noPlay = false, isRetr
 
                 audio.src = finalUrl;
 
-                // 设置重试机制：如果缓存链接失效，则清除缓存并重新尝试（走网络）
+                // 设置重试机制：如果缓存链接失效，则清除缓存，并尝试逻辑链下一环（服务器文件缓存）
                 const retryHandler = () => {
-                    console.warn('[Player] 缓存链接失效，尝试重新获取...');
+                    console.warn('[Player] 缓存链接失效，正在尝试逻辑链下一环（服务器缓存）...');
                     localStorage.removeItem(cacheKey);
-                    // 防止死循环，isRetry 置为 true
-                    playSong(song, index, forceQuality, noPlay, true);
+                    // 标记为 'link_retry'，以便后续允许检查服务器缓存
+                    playSong(song, index, forceQuality, noPlay, 'link_retry');
                 };
 
                 audio.addEventListener('error', retryHandler, { once: true });
@@ -1295,9 +1297,8 @@ async function playSong(song, index, forceQuality = null, noPlay = false, isRetr
                 // 如果是静默加载（用于恢复进度）
                 if (noPlay) {
                     currentQuality = quality;
-                    setPlayerStatus('', false); // 使用智能状态显示
+                    setPlayerStatus('', false);
                     updatePlayButton(false);
-                    // 加载元数据后尝试恢复进度
                     if (window._resumeInfo && window._resumeInfo.time > 0) {
                         audio.addEventListener('loadedmetadata', () => {
                             audio.currentTime = window._resumeInfo.time;
@@ -1307,10 +1308,10 @@ async function playSong(song, index, forceQuality = null, noPlay = false, isRetr
                     return;
                 }
 
-                setPlayerStatus('', true); // 使用智能状态显示
+                // [Improvement] 这里不要直接显示 "播放中"，而是在真的 play 开始前提示加载
+                setPlayerStatus('正在加载缓存链接...', false);
                 if (!noPlay) {
                     try {
-                        // [Crossfade] 如果开启了淡入淡出，播放前先将音量降为 0，准备淡入
                         if (settings.enableCrossfade) {
                             audio.volume = 0;
                         } else {
@@ -1322,8 +1323,7 @@ async function playSong(song, index, forceQuality = null, noPlay = false, isRetr
                         if (settings.enableCrossfade) {
                             fadeVolume(typeof currentVolume !== 'undefined' ? currentVolume : 1, 1000);
                         }
-
-                        updatePlayButton(true);
+                        // 真正的状态更新交由 play/playing 事件监听器处理
                     } catch (e) {
                         console.error("[Player] Auto-play failed:", e);
                         updatePlayButton(false);
@@ -1334,8 +1334,11 @@ async function playSong(song, index, forceQuality = null, noPlay = false, isRetr
         }
 
         // ===== 尝试读取服务器文件缓存 =====
-        // 优先级: 链接缓存 > 本地文件缓存 > 在线获取
-        if (!isRetry && settings.enableServerCache && !forceQuality) {
+        // 优先级逻辑链: 链接缓存 > 服务器文件缓存 > 在线获取
+        // [Improvement] 如果 isRetry === 'link_retry'，说明链接缓存刚失效，这里可以继续尝试服务器缓存
+        const allowServerCache = !isRetry || isRetry === 'link_retry';
+
+        if (allowServerCache && settings.enableServerCache && !forceQuality) {
             setPlayerStatus('正在检查服务器缓存...');
             const serverCacheUrl = await checkServerCache(cleanedSong, quality);
             if (serverCacheUrl) {
@@ -1344,7 +1347,8 @@ async function playSong(song, index, forceQuality = null, noPlay = false, isRetr
                 audio.src = serverCacheUrl; // 本地路径，无需代理
 
                 const retryHandler = () => {
-                    console.warn('[Player] 服务器缓存文件失效/无法播放，尝试重新获取...');
+                    console.warn('[Player] 服务器缓存文件失效，正在尝试在线获取...');
+                    // 服务器缓存也死掉，则彻底走在线获取 (标记为 true 即可跳过所有缓存逻辑)
                     playSong(song, index, forceQuality, noPlay, true);
                 };
                 audio.addEventListener('error', retryHandler, { once: true });
@@ -1357,9 +1361,8 @@ async function playSong(song, index, forceQuality = null, noPlay = false, isRetr
                 // 如果是静默加载（用于恢复进度）
                 if (noPlay) {
                     currentQuality = quality;
-                    setPlayerStatus('', false); // 使用智能状态显示
+                    setPlayerStatus('', false);
                     updatePlayButton(false);
-                    // 加载元数据后尝试恢复进度
                     if (window._resumeInfo && window._resumeInfo.time > 0) {
                         audio.addEventListener('loadedmetadata', () => {
                             audio.currentTime = window._resumeInfo.time;
@@ -1369,10 +1372,9 @@ async function playSong(song, index, forceQuality = null, noPlay = false, isRetr
                     return;
                 }
 
-                setPlayerStatus('', true); // 使用智能状态显示
+                setPlayerStatus('正在加载服务器缓存文件...', false);
                 if (!noPlay) {
                     try {
-                        // [Crossfade] 如果开启了淡入淡出，播放前先将音量降为 0，准备淡入
                         if (settings.enableCrossfade) {
                             audio.volume = 0;
                         } else {
@@ -1384,8 +1386,6 @@ async function playSong(song, index, forceQuality = null, noPlay = false, isRetr
                         if (settings.enableCrossfade) {
                             fadeVolume(typeof currentVolume !== 'undefined' ? currentVolume : 1, 1000);
                         }
-
-                        updatePlayButton(true);
                     } catch (e) {
                         console.error("[Player] Auto-play failed:", e);
                         updatePlayButton(false);
@@ -2843,9 +2843,10 @@ function clearCache(type) {
 
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (type === 'lyric' && key.startsWith('lx_lyric_v2_')) {
+        // [Fix] 统一使用 lx_lyric_ 和 lx_url_ 前缀进行清理
+        if (type === 'lyric' && key.startsWith('lx_lyric_')) {
             keysToRemove.push(key);
-        } else if (type === 'url' && key.startsWith('lx_url_v2_')) {
+        } else if (type === 'url' && key.startsWith('lx_url_')) {
             keysToRemove.push(key);
         }
     }
@@ -3048,7 +3049,7 @@ async function fetchLyric(song) {
     currentLyricLines = [];
 
     // ===== 尝试读取缓存 =====
-    const cacheKey = `lx_lyric_v2_${source}_${songmid}`;
+    const cacheKey = `lx_lyric_${source}_${songmid}`;
     if (settings.enableLyricCache !== false) {
         try {
             const cached = localStorage.getItem(cacheKey);
