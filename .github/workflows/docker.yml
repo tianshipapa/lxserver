@@ -58,7 +58,7 @@ jobs:
           PACKAGE_NAME="lxserver"
           OWNER="${{ github.repository_owner }}"
           
-          for TAG in "${{ env.PROJECT_VERSION }}" "latest"; do
+          for TAG in "${{ env.PROJECT_VERSION }}"; do
             echo "Checking for existing tag: $TAG"
             
             # 优先尝试用户 API，再尝试组织 API
