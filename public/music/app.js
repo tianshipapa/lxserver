@@ -7381,7 +7381,7 @@ function togglePlayerPanel() {
         views.forEach(id => {
             const el = document.getElementById(id);
             if (el) {
-                el.classList.remove('pb-32', 'pb-44');
+                el.classList.remove('pb-32', 'pb-44', 'md:pb-32');
                 el.classList.add('pb-44', 'md:pb-32');
             }
         });
@@ -7419,7 +7419,7 @@ function togglePlayerPanel() {
         // 移除内容底部 Padding (内容延伸到底部)
         views.forEach(id => {
             const el = document.getElementById(id);
-            if (el) el.classList.remove('pb-32', 'pb-44');
+            if (el) el.classList.remove('pb-32', 'pb-44', 'md:pb-32');
         });
 
         // 歌词页: 移除底部 Padding (利用底部空间)
