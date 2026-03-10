@@ -599,9 +599,9 @@ class WebDAVSync extends EventEmitter {
                     await this.downloadFile(relativePath)
                 }
 
-                // 如果恢复的文件中没有 config.js，主动上传本地的
+                // 如果恢复的文件中没有 config.js，说明云端配置缺失，将当前内存配置（含环境变量）同步上去
                 if (!hasConfig) {
-                    console.log('Cloud config.js not found, saving current and uploading local one...')
+                    console.log('Cloud config.js not found, saving current memory config and uploading...')
                     if (global.lx && global.lx.saveConfig) {
                         global.lx.saveConfig()
                     }
@@ -622,6 +622,15 @@ class WebDAVSync extends EventEmitter {
             this.emit('progress', { type: 'restore', status: 'start', message: '正在从云端下载备份...' })
             const result = await this.downloadLatestBackup()
             if (result) {
+                // 检查解压后根目录是否确实有了 config.js
+                const rootConfigPath = path.join(process.cwd(), 'config.js')
+                if (!fs.existsSync(rootConfigPath)) {
+                    console.log('Backup restored but config.js is missing, saving current config and uploading...')
+                    if (global.lx && global.lx.saveConfig) {
+                        global.lx.saveConfig()
+                    }
+                    await this.uploadFile('config.js')
+                }
                 this.emit('progress', { type: 'restore', status: 'finish', message: '备份恢复完成' })
                 return true
             } else {
