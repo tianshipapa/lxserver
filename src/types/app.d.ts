@@ -9,6 +9,7 @@ declare global {
     config: LX.Config
     webdavSync?: any  // WebDAVSync instance
     staticPath: string
+    saveConfig: () => void
   }
 
   // var envParams: LX.EnvParams

@@ -8,10 +8,11 @@ LX Music Sync Server 构建了统一的基础模型骨架（位于 `src/defaultC
 
 配置的加载与合并遵循以下由高到低的优先级序列，高优先级选项将**硬性覆盖**低优先级对应的键值：
 
-1. **运行时环境变量 (Environment Variables)**：具有最高优先级。例如在执行层面挂载 `PORT=9527 DISABLE_TELEMETRY=true npm start`。由于其意图最为明确，系统将优先信任并采纳。
-2. **显式自定义配置文件路径 (Custom Config File)**：通过环境变量 `CONFIG_PATH=/data/custom/my-config.json` 指定读取的特定 JSON 物理映射文件。
-3. **全局默认入口配置 (Global Config.js)**：基于 Node.js 模块解析机制，置于项目根目录下的 `config.js` 文件。
-4. **系统级默认常量 (Default Consts)**：声明于 `src/defaultConfig.ts` 中的默认保障值。
+1. **运行时环境变量 (Environment Variables)**：具有极高优先级。例如 `PORT=9527`。
+2. **WebDAV 云端同步数据 (WebDAV Cloud Data)**：若配置了 WebDAV，启动时系统会尝试从云端恢复。**云端恢复的内容会覆盖本地 `config.js` 并触发热重载**。
+3. **显式自定义配置文件路径 (Custom Config File)**：通过 `CONFIG_PATH` 指定的文件。
+4. **全局默认入口配置 (Global Config.js)**：项目根目录下的 `config.js`。
+5. **系统级默认常量 (Default Consts)**：`src/defaultConfig.ts`。
 
 ---
 
@@ -52,7 +53,9 @@ LX Music Sync Server 构建了统一的基础模型骨架（位于 `src/defaultC
 | `WEBDAV_PASSWORD`  | `''`     | String   | 远端 WebDAV 网关通行密匙（强烈推荐使用独立的应用专用授权密码以降低泄漏次生风险）。                             |
 | `SYNC_INTERVAL`    | `60`     | Integer  | 触发全量热备、拉取比对同步推流周期的冷缩缓冲定时参数（单位：分钟）。                                           |
 
-> 🔖 **状态无感迁移启动机制 (Stateful Resurrection)**：若服务首次发生冷启动初始化建立目录集结时探测到此组变量完整合法。Node.js 后端服务将会拉取云端存档点，从而覆写当前实例的数据状态，这为大规模集群、灾难重构及平滑异地搬机创造了无摩擦落地的技术可行性。
+> 🔖 **状态无感迁移与初始化机制 (Stateful Resurrection)**：
+> 1. **云端优先恢复**：若启动时探测到此组变量，系统会优先尝试从云端拉取存档。
+> 2. **环境驱动落盘**：若云端配置为空（如首次在 Docker/云端部署），系统会**自动将当前运行环境中的生效配置（如通过环境变量设置的端口、密码等）持久化写入本地 `config.js` 并同步上传至云端**进行初始化。这确保了您仅通过环境变量即可完成云端数据的首次“开荒”建立。
 
 ### 四、 Web 端复合媒体播放空间防护逻辑
 

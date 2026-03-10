@@ -8,10 +8,11 @@ LX Music Sync Server has built a unified basic model skeleton (located in `src/d
 
 The loading and merging of configurations follow the priority sequence from high to low below. High-priority options will **hardly override** the corresponding keys of low-priority ones:
 
-1. **Runtime Environment Variables (Environment Variables)**: Has the highest priority. For example, mounting `PORT=9527 DISABLE_TELEMETRY=true npm start` at the execution level. Since its intention is the most clear, the system will prioritize trusting and adopting it.
-2. **Explicit Custom Configuration File Path (Custom Config File)**: Specify a specific JSON physical mapping file to be read through the environment variable `CONFIG_PATH=/data/custom/my-config.json`.
-3. **Global Default Entry Configuration (Global Config.js)**: Based on the Node.js module resolution mechanism, placed in the `config.js` file in the project's root directory.
-4. **System-level Default Constants (Default Consts)**: Default guarantee values declared in `src/defaultConfig.ts`.
+1. **Runtime Environment Variables (Environment Variables)**: Has very high priority. For example, `PORT=9527`.
+2. **WebDAV Cloud Data (WebDAV Cloud Data)**: If WebDAV is configured, the system will try to restore from the cloud on startup. **Restored cloud content will overwrite the local `config.js` and trigger a hot-reload**.
+3. **Explicit Custom Configuration File Path (Custom Config File)**: Static JSON file specified via `CONFIG_PATH`.
+4. **Global Default Entry Configuration (Global Config.js)**: The `config.js` file in the project's root directory.
+5. **System-level Default Constants (Default Consts)**: Defaults in `src/defaultConfig.ts`.
 
 ---
 
@@ -52,7 +53,9 @@ The underlying periodic polling asynchronous daemon of the service will only be 
 | `WEBDAV_PASSWORD` | `''` | String | Remote WebDAV gateway access key (highly recommended to use an independent application-specific authorization password to reduce secondary leakage risks). |
 | `SYNC_INTERVAL` | `60` | Integer | Cold shrinking timed parameters (unit: minutes) that trigger full thermal backup and pull comparison synchronization flow periods. |
 
-> 🔖 **Stateful Resurrection Mechanism**: If the service first undergoes cold start initialization and directory gathering and detects that this group of variables is complete and legal. The Node.js backend service will pull cloud archive points, thereby overwriting the data state of the current instance. This creates technical feasibility for friction-less landing for large-scale clusters, disaster reconstruction, and smooth off-site machine migration.
+> 🔖 **Stateful Resurrection and Initialization Mechanism**:
+> 1. **Cloud-First Restore**: If the variables are detected on startup, the system prioritizes pulling archives from the cloud.
+> 2. **Environment-Driven Persistence**: If the cloud config is empty (e.g., first deployment in Docker/Cloud), the system will **automatically persist the current effective configuration (such as ports, passwords set via environment variables) into the local `config.js` and upload it to the cloud** for initialization. This ensures you can establish the initial cloud data solely through environment variables.
 
 ### IV. Web-side Composite Media Playback Space Protection Logic
 

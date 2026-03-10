@@ -601,7 +601,10 @@ class WebDAVSync extends EventEmitter {
 
                 // 如果恢复的文件中没有 config.js，主动上传本地的
                 if (!hasConfig) {
-                    console.log('Cloud config.js not found, uploading local one...')
+                    console.log('Cloud config.js not found, saving current and uploading local one...')
+                    if (global.lx && global.lx.saveConfig) {
+                        global.lx.saveConfig()
+                    }
                     await this.uploadFile('config.js')
                 }
 
@@ -624,8 +627,14 @@ class WebDAVSync extends EventEmitter {
             } else {
                 // 如果未找到散文件也未找到备份，说明是第一次配置或云端为空
                 // 主动上传当前的 config.js 到云端进行初始化
-                console.log('Cloud is empty, uploading local config.js to initialize /lx-sync/...')
+                console.log('Cloud is empty, saving current config and uploading to initialize /lx-sync/...')
                 this.emit('progress', { type: 'restore', status: 'processing', message: '云端为空，正在上传本地配置初始化...' })
+
+                // 保存当前内存中的配置（包含环境变量生效后的结果）到磁盘
+                if (global.lx && global.lx.saveConfig) {
+                    global.lx.saveConfig()
+                }
+
                 await this.uploadFile('config.js')
                 this.emit('progress', { type: 'restore', status: 'finish', message: '云端配置同步完成' })
                 return false

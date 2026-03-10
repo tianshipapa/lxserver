@@ -60,12 +60,24 @@ const envParamKeys = Object.values(ENV_PARAMS).filter(v => v != 'LX_USER_')
 }
 
 const dataPath = envParams.DATA_PATH ?? path.join(__dirname, '../data')
+const saveConfigToFile = () => {
+  const configPath = path.join(process.cwd(), 'config.js')
+  const content = `module.exports = ${JSON.stringify(global.lx.config, null, 2)}`
+  try {
+    fs.writeFileSync(configPath, content)
+    // console.log('Current memory config saved to config.js')
+  } catch (err) {
+    console.error('Failed to save config.js:', err)
+  }
+}
+
 global.lx = {
   logPath: envParams.LOG_PATH ?? path.join(__dirname, '../logs'),
   dataPath,
   userPath: path.join(dataPath, File.userDir),
   config: defaultConfig,
   staticPath: path.join(process.cwd(), 'public'),
+  saveConfig: saveConfigToFile,
 }
 
 const mergeConfigFileEnv = (config: Partial<Record<ENV_PARAMS_Value_Type, string>>) => {
