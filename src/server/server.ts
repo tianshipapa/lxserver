@@ -2430,17 +2430,8 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
       // [新增] 封面 API (备用)
 
       // [新增] 自定义源管理 API
-      if (pathname.startsWith('/api/custom-source/') && req.method === 'POST') {
-        // 白名单：只有列表获取不需要校验管理员密码
-        if (pathname !== '/api/custom-source/list') {
-          const auth = req.headers['x-frontend-auth']
-          if (auth !== global.lx.config['frontend.password']) {
-            res.writeHead(403, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ success: false, error: '权限不足：管理自定义源需要先验证管理员身份。' }))
-            return
-          }
-        }
-      }
+      // 注：此处不再进行全局强制鉴权，鉴权逻辑已下放到 customSourceHandlers 中，
+      // 以便根据请求体中的 username 字段判断是否需要校验管理员密码。
 
       if (pathname === '/api/custom-source/validate' && req.method === 'POST') {
         return customSourceHandlers.handleValidate(req, res)

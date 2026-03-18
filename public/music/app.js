@@ -6435,7 +6435,10 @@ async function handleFileUpload(input) {
         let validationRes = await fetch('/api/custom-source/validate', {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify({ script: content })
+            body: JSON.stringify({
+                script: content,
+                username: currentListData?.username || 'default'
+            })
         });
 
         if (validationRes.status === 403) {
