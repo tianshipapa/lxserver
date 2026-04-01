@@ -55,14 +55,13 @@ win:
     # ── 独立架构安装包 ──
     - target: nsis
       arch: [x64, ia32, arm64]
-      artifactName: "${productName} ${version} ${arch} Setup.${ext}"
     # ── 便携绿色版 (分架构) ──
     - target: portable
       arch: [x64, ia32, arm64]
-      artifactName: "${productName} ${version} ${arch} Portable.${ext}"
   requestedExecutionLevel: asInvoker
 
 nsis:
+  artifactName: "${productName} ${version} ${arch} Setup.${ext}"
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
@@ -70,6 +69,9 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: "LX Music Server"
+
+portable:
+  artifactName: "${productName} ${version} ${arch} Portable.${ext}"
 
 # ── macOS ────────────────────────────────────────────────────────────────────
 mac:
