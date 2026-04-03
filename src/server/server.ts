@@ -62,7 +62,46 @@ setInterval(() => {
     if (now - session.createdAt > SESSION_TTL) playerSessions.delete(id)
   }
 }, 60 * 60 * 1000)
-// ===== End Session Store =====
+// ===== End Player Session Store =====
+
+// ===== User Session Token Store =====
+/** 用户 Token 存储：token → { username, createdAt } */
+const userSessions = new Map<string, { username: string; createdAt: number }>()
+const USER_SESSION_TTL = 7 * 24 * 60 * 60 * 1000 // 7天
+
+/**
+ * 验证请求中的用户 Token（x-user-token header）。
+ * 兼容旧方式：若无 token，则尝试 x-user-name + x-user-password 明文验证（过渡期）。
+ * 返回已验证的用户名，或 null 表示未认证。
+ */
+const verifyUserAuth = (req: IncomingMessage): string | null => {
+  // 优先：Token 验证
+  const token = req.headers['x-user-token'] as string
+  if (token) {
+    const session = userSessions.get(token)
+    if (session && Date.now() - session.createdAt <= USER_SESSION_TTL) {
+      return session.username
+    }
+    return null // Token 存在但无效/过期
+  }
+  // 兼容旧方式：明文密码（过渡期保留）
+  const username = req.headers['x-user-name'] as string
+  const password = req.headers['x-user-password'] as string
+  if (username && password) {
+    const user = global.lx.config.users.find((u: any) => u.name === username && u.password === password)
+    if (user) return username
+  }
+  return null
+}
+
+/** 定期清理过期用户 Token（每小时） */
+setInterval(() => {
+  const now = Date.now()
+  for (const [token, session] of userSessions) {
+    if (now - session.createdAt > USER_SESSION_TTL) userSessions.delete(token)
+  }
+}, 60 * 60 * 1000)
+// ===== End User Session Token Store =====
 
 
 const getMime = (filename: string) => {
@@ -687,14 +726,28 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
           return
         }
 
-        const user = urlObj.searchParams.get('user')
-        if (!user) {
+        const userParam = urlObj.searchParams.get('user')
+        if (!userParam) {
           res.writeHead(400)
           res.end('Missing user param')
           return
         }
 
-        const userSpace = getUserSpace(user)
+        // 鉴权逻辑：具名用户必须验证 Token，且必须是本人数据
+        const isPublic = userParam === 'default' || userParam === '_open'
+        let verifiedUser: string | null = null
+        if (isPublic) {
+          verifiedUser = '_open'
+        } else {
+          verifiedUser = verifyUserAuth(req)
+          if (!verifiedUser || verifiedUser !== userParam) {
+            res.writeHead(403)
+            res.end('Forbidden: User mismatch or unauthorized')
+            return
+          }
+        }
+
+        const userSpace = getUserSpace(verifiedUser)
         void userSpace.listManage.getListData().then(data => {
           res.writeHead(200, {
             'Content-Type': 'application/json',
@@ -709,18 +762,28 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
       }
       // 获取快照列表
       if (pathname === '/api/data/snapshots' && req.method === 'GET') {
-        const user = urlObj.searchParams.get('user')
-        if (!user) {
+        const userParam = urlObj.searchParams.get('user')
+        if (!userParam) {
           res.writeHead(400)
           res.end('Missing user param')
           return
         }
-        const userSpace = getUserSpace(user)
-        if (!userSpace) {
-          res.writeHead(401)
-          res.end('Unauthorized')
-          return
+
+        // 鉴权逻辑
+        const isPublic = userParam === 'default' || userParam === '_open'
+        let verifiedUser: string | null = null
+        if (isPublic) {
+          verifiedUser = '_open'
+        } else {
+          verifiedUser = verifyUserAuth(req)
+          if (!verifiedUser || verifiedUser !== userParam) {
+            res.writeHead(403)
+            res.end('Forbidden')
+            return
+          }
         }
+
+        const userSpace = getUserSpace(verifiedUser)
         try {
           const list = await userSpace.listManage.getSnapshotList()
           res.writeHead(200, {
@@ -737,18 +800,27 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
       // 下载快照数据
       if (pathname === '/api/data/snapshot' && req.method === 'GET') {
-        const user = urlObj.searchParams.get('user')
-        if (!user) {
+        const userParam = urlObj.searchParams.get('user')
+        if (!userParam) {
           res.writeHead(400)
           res.end('Missing user param')
           return
         }
-        const userSpace = getUserSpace(user)
-        if (!userSpace) {
-          res.writeHead(401)
-          res.end('Unauthorized')
-          return
+
+        const isPublic = userParam === 'default' || userParam === '_open'
+        let verifiedUser: string | null = null
+        if (isPublic) {
+          verifiedUser = '_open'
+        } else {
+          verifiedUser = verifyUserAuth(req)
+          if (!verifiedUser || verifiedUser !== userParam) {
+            res.writeHead(403)
+            res.end('Forbidden')
+            return
+          }
         }
+
+        const userSpace = getUserSpace(verifiedUser)
         const id = urlObj.searchParams.get('id')
         if (!id) {
           res.writeHead(400)
@@ -776,18 +848,27 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
       // 恢复快照
       if (pathname === '/api/data/restore-snapshot' && req.method === 'POST') {
-        const user = urlObj.searchParams.get('user')
-        if (!user) {
+        const userParam = urlObj.searchParams.get('user')
+        if (!userParam) {
           res.writeHead(400)
           res.end('Missing user param')
           return
         }
-        const userSpace = getUserSpace(user)
-        if (!userSpace) {
-          res.writeHead(401)
-          res.end('Unauthorized')
-          return
+
+        const isPublic = userParam === 'default' || userParam === '_open'
+        let verifiedUser: string | null = null
+        if (isPublic) {
+          verifiedUser = '_open'
+        } else {
+          verifiedUser = verifyUserAuth(req)
+          if (!verifiedUser || verifiedUser !== userParam) {
+            res.writeHead(403)
+            res.end('Forbidden')
+            return
+          }
         }
+
+        const userSpace = getUserSpace(verifiedUser)
         try {
           const body = await readBody(req)
           const { id } = JSON.parse(body)
@@ -806,19 +887,10 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
       // [新增] Batch Remove Songs from List (User Auth)
       if (pathname === '/api/music/user/list/remove' && req.method === 'POST') {
-        const username = req.headers['x-user-name'] as string
-        const password = req.headers['x-user-password'] as string
-
-        if (!username || !password) {
-          res.writeHead(401)
-          res.end('需要用户认证')
-          return
-        }
-
-        const user = global.lx.config.users.find(u => u.name === username && u.password === password)
-        if (!user) {
-          res.writeHead(401)
-          res.end('用户名或密码错误')
+        const username = verifyUserAuth(req)
+        if (!username) {
+          res.writeHead(401, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: false, message: '需要用户认证' }))
           return
         }
 
@@ -868,18 +940,27 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
       // [新增] 删除快照 API
       if (pathname === '/api/data/delete-snapshot' && req.method === 'POST') {
-        const user = urlObj.searchParams.get('user')
-        if (!user) {
+        const userParam = urlObj.searchParams.get('user')
+        if (!userParam) {
           res.writeHead(400)
           res.end('Missing user param')
           return
         }
-        const userSpace = getUserSpace(user)
-        if (!userSpace) {
-          res.writeHead(401)
-          res.end('Unauthorized')
-          return
+
+        const isPublic = userParam === 'default' || userParam === '_open'
+        let verifiedUser: string | null = null
+        if (isPublic) {
+          verifiedUser = '_open'
+        } else {
+          verifiedUser = verifyUserAuth(req)
+          if (!verifiedUser || verifiedUser !== userParam) {
+            res.writeHead(403)
+            res.end('Forbidden')
+            return
+          }
         }
+
+        const userSpace = getUserSpace(verifiedUser)
         try {
           const body = await readBody(req)
           const { id } = JSON.parse(body)
@@ -898,27 +979,36 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
       }
       // [新增] 上传快照 API
       if (pathname === '/api/data/upload-snapshot' && req.method === 'POST') {
-        const user = urlObj.searchParams.get('user')
+        const userParam = urlObj.searchParams.get('user')
         const time = parseInt(urlObj.searchParams.get('time') || '0')
         const filename = urlObj.searchParams.get('filename')
 
-        if (!user) {
+        if (!userParam) {
           res.writeHead(400)
           res.end('Missing user param')
           return
         }
+
+        const isPublic = userParam === 'default' || userParam === '_open'
+        let verifiedUser: string | null = null
+        if (isPublic) {
+          verifiedUser = '_open'
+        } else {
+          verifiedUser = verifyUserAuth(req)
+          if (!verifiedUser || verifiedUser !== userParam) {
+            res.writeHead(403)
+            res.end('Forbidden')
+            return
+          }
+        }
+
         if (!filename) {
           res.writeHead(400)
           res.end('Missing filename param')
           return
         }
 
-        const userSpace = getUserSpace(user)
-        if (!userSpace) {
-          res.writeHead(401)
-          res.end('Unauthorized')
-          return
-        }
+        const userSpace = getUserSpace(verifiedUser)
 
         try {
           const body = await readBody(req)
@@ -970,21 +1060,67 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
         return
       }
 
-      // [新增] Get User List (User Auth)
-      if (pathname === '/api/user/list' && req.method === 'GET') {
-        const username = req.headers['x-user-name'] as string
-        const password = req.headers['x-user-password'] as string
+      // [新增] 用户登录 - 颁发 Token（替代明文密码传输）
+      if (pathname === '/api/user/login' && req.method === 'POST') {
+        void readBody(req).then(body => {
+          try {
+            const { username, password } = JSON.parse(body)
+            if (!username || !password) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ success: false, message: 'Missing username or password' }))
+              return
+            }
+            const user = global.lx.config.users.find((u: any) => u.name === username && u.password === password)
+            if (user) {
+              const token = generateSessionId()
+              userSessions.set(token, { username, createdAt: Date.now() })
+              loginLog.info(`User token issued: ${username} from ${ip}`)
+              res.writeHead(200, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ success: true, token, username }))
+            } else {
+              loginLog.warn(`User login failed: ${username} from ${ip}`)
+              res.writeHead(401, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ success: false, message: 'Invalid credentials' }))
+            }
+          } catch (e) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, message: 'Bad Request' }))
+          }
+        })
+        return
+      }
 
-        if (!username || !password) {
-          res.writeHead(401)
-          res.end('Missing credentials')
+      // [新增] 用户登出 - 注销 Token
+      if (pathname === '/api/user/logout' && req.method === 'POST') {
+        const token = req.headers['x-user-token'] as string
+        if (token) userSessions.delete(token)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ success: true }))
+        return
+      }
+
+      // [新增] Token 有效性检查
+      if (pathname === '/api/user/auth/verify' && req.method === 'GET') {
+        const token = req.headers['x-user-token'] as string
+        if (!token) {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ valid: false }))
           return
         }
+        const session = userSessions.get(token)
+        const valid = !!(session && Date.now() - session.createdAt <= USER_SESSION_TTL)
+        if (!valid && session) userSessions.delete(token) // 清理过期
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ valid, username: valid ? session!.username : null }))
+        return
+      }
 
-        const user = global.lx.config.users.find(u => u.name === username && u.password === password)
-        if (!user) {
-          res.writeHead(401)
-          res.end('Unauthorized')
+      // [新增] Get User List (User Auth)
+      if (pathname === '/api/user/list' && req.method === 'GET') {
+        const username = verifyUserAuth(req)
+        if (!username) {
+          res.writeHead(401, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
           return
         }
 
@@ -1004,19 +1140,10 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
       // [新增] Update User List (User Auth) - Full Restore/Overwrite
       if (pathname === '/api/user/list' && req.method === 'POST') {
-        const username = req.headers['x-user-name'] as string
-        const password = req.headers['x-user-password'] as string
-
-        if (!username || !password) {
-          res.writeHead(401)
-          res.end('Missing credentials')
-          return
-        }
-
-        const user = global.lx.config.users.find(u => u.name === username && u.password === password)
-        if (!user) {
-          res.writeHead(401)
-          res.end('Unauthorized')
+        const username = verifyUserAuth(req)
+        if (!username) {
+          res.writeHead(401, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
           return
         }
 
@@ -1041,25 +1168,22 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
       // [新增] Get User Settings (User Auth)
       if (pathname === '/api/user/settings' && req.method === 'GET') {
-        const username = req.headers['x-user-name'] as string
-        const password = req.headers['x-user-password'] as string
-        const isPublic = !username || username === 'default'
-        let user = null
+        const reqUsername = req.headers['x-user-name'] as string
+        const isPublic = !reqUsername || reqUsername === 'default'
+        let resolvedUsername: string | null = null
 
-        // 如果是公开用户，且启用了限制，允许通过虚拟鉴权
         if (isPublic && global.lx.config['user.enablePublicRestriction']) {
-          user = { name: 'default' }
+          resolvedUsername = '_open' // 公开受限用户允许访问 _open 空间
         } else {
-          user = global.lx.config.users.find(u => u.name === username && u.password === password)
+          resolvedUsername = verifyUserAuth(req)
+          if (!resolvedUsername) {
+            res.writeHead(401, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
+            return
+          }
         }
 
-        if (!user) {
-          res.writeHead(401)
-          res.end('Unauthorized')
-          return
-        }
-
-        const userSpace = getUserSpace(isPublic ? '_open' : username)
+        const userSpace = getUserSpace(resolvedUsername)
         const settingsPath = path.join(userSpace.dataManage.userDir, File.userSettingsJSON)
 
         if (fs.existsSync(settingsPath)) {
@@ -1076,36 +1200,39 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
       // [新增] Update User Settings (User Auth)
       if (pathname === '/api/user/settings' && req.method === 'POST') {
-        const username = req.headers['x-user-name'] as string
-        const password = req.headers['x-user-password'] as string
-        const isPublic = !username || username === 'default'
+        const reqUsername = req.headers['x-user-name'] as string
+        const isPublic = !reqUsername || reqUsername === 'default'
+        let resolvedUsername: string | null = null
 
-        // 如果是公开用户，且启用了限制，检查管理员密码
-        if (isPublic && global.lx.config['user.enablePublicRestriction']) {
-          const auth = req.headers['x-frontend-auth']
-          if (auth !== global.lx.config['frontend.password']) {
-            res.writeHead(403, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ success: false, error: '权限不足：公共用户保存设置受限，请先验证管理员身份。' }))
+        if (isPublic) {
+          // 公开用户：若开启了限制，需要管理员密码
+          if (global.lx.config['user.enablePublicRestriction']) {
+            const auth = req.headers['x-frontend-auth']
+            if (auth !== global.lx.config['frontend.password']) {
+              res.writeHead(403, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ success: false, error: '权限不足：公共用户保存设置受限，请先验证管理员身份。' }))
+              return
+            }
+          }
+          resolvedUsername = '_open'
+        } else {
+          resolvedUsername = verifyUserAuth(req)
+          if (!resolvedUsername) {
+            res.writeHead(401, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
             return
           }
         }
 
-        const user = isPublic ? { name: 'default' } : global.lx.config.users.find(u => u.name === username && u.password === password)
-        if (!user) {
-          res.writeHead(401)
-          res.end('Unauthorized')
-          return
-        }
-
         void readBody(req).then(body => {
           try {
-            const userSpace = getUserSpace(isPublic ? '_open' : username)
+            const userSpace = getUserSpace(resolvedUsername!)
             const settingsPath = path.join(userSpace.dataManage.userDir, File.userSettingsJSON)
 
             let settings = JSON.parse(body)
 
             // [核心逻辑] 如果是受限的公开用户，仅允许保存特定的 3 项设置
-            if (isPublic && global.lx.config['user.enablePublicRestriction']) {
+            if (resolvedUsername === '_open' && global.lx.config['user.enablePublicRestriction']) {
               const restrictedSettings: any = {}
               const allowedKeys = ['enableServerCache', 'enableServerLyricCache', 'serverCacheLocation']
               allowedKeys.forEach(key => {
@@ -1127,13 +1254,10 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
       // [新增] Get User Sound Effects (User Auth)
       if (pathname === '/api/user/sound-effects' && req.method === 'GET') {
-        const username = req.headers['x-user-name'] as string
-        const password = req.headers['x-user-password'] as string
-
-        const user = global.lx.config.users.find(u => u.name === username && u.password === password)
-        if (!user) {
-          res.writeHead(401)
-          res.end('Unauthorized')
+        const username = verifyUserAuth(req)
+        if (!username) {
+          res.writeHead(401, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
           return
         }
 
@@ -1154,13 +1278,10 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
       // [新增] Update User Sound Effects (User Auth)
       if (pathname === '/api/user/sound-effects' && req.method === 'POST') {
-        const username = req.headers['x-user-name'] as string
-        const password = req.headers['x-user-password'] as string
-
-        const user = global.lx.config.users.find(u => u.name === username && u.password === password)
-        if (!user) {
-          res.writeHead(401)
-          res.end('Unauthorized')
+        const username = verifyUserAuth(req)
+        if (!username) {
+          res.writeHead(401, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
           return
         }
 
@@ -1186,8 +1307,18 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
       // [新增] File Cache APIs
       // 1. Config Cache Location
       if (pathname === '/api/music/cache/config' && req.method === 'POST') {
-        const username = (req.headers['x-user-name'] as string) || ''
-        const isPublic = !username || username === 'default'
+        const reqUsername = req.headers['x-user-name'] as string
+        const isPublic = !reqUsername || reqUsername === 'default'
+
+        // 具名用户必须通过 Token（或兼容密码）验证身份
+        if (!isPublic) {
+          const verified = verifyUserAuth(req)
+          if (!verified) {
+            res.writeHead(401, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
+            return
+          }
+        }
 
         void readBody(req).then(body => {
           try {
@@ -1200,7 +1331,7 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
                 return
               }
 
-              // [新增] 权限检查
+              // 公开用户：需要管理员密码才能修改
               if (isPublic && global.lx.config['user.enablePublicRestriction']) {
                 const auth = req.headers['x-frontend-auth']
                 if (auth !== global.lx.config['frontend.password']) {
@@ -1241,7 +1372,20 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
           return
         }
 
-        const username = req.headers['x-user-name'] as string
+        const reqUsername = (req.headers['x-user-name'] as string) || ''
+        const isPublic = !reqUsername || reqUsername === 'default'
+        let username = '_open'
+
+        if (!isPublic) {
+          const verified = verifyUserAuth(req)
+          if (!verified) {
+            res.writeHead(401, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
+            return
+          }
+          username = verified
+        }
+
         const result = fileCache.checkCache({ name, singer, source, songmid, songId, quality, exactQuality }, username)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify(result))
@@ -1260,7 +1404,19 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
             }
 
             // Fire and forget (background download) with Abort support
-            const username = (req.headers['x-user-name'] as string) || ''
+            const reqUsername = (req.headers['x-user-name'] as string) || ''
+            const isPublic = !reqUsername || reqUsername === 'default'
+            let username = '_open'
+
+            if (!isPublic) {
+              const verified = verifyUserAuth(req)
+              if (!verified) {
+                res.writeHead(401, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
+                return
+              }
+              username = verified
+            }
             const songKey = String(songInfo.id || songInfo.songmid)
 
             console.log(`[Cache] Registering active task: ${songKey} for user: "${username}"`)
@@ -1306,7 +1462,19 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
       // [New] Stop Cache Task
       if (pathname === '/api/music/cache/stop' && req.method === 'POST') {
-        const username = (req.headers['x-user-name'] as string) || ''
+        const reqUsername = (req.headers['x-user-name'] as string) || ''
+        const isPublic = !reqUsername || reqUsername === 'default'
+        let username = '_open'
+
+        if (!isPublic) {
+          const verified = verifyUserAuth(req)
+          if (!verified) {
+            res.writeHead(401, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
+            return
+          }
+          username = verified
+        }
         void readBody(req).then(body => {
           try {
             const { songKey, all } = JSON.parse(body)
@@ -1341,7 +1509,19 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
       // 5. Get Cache Statistics
       if (pathname === '/api/music/cache/stats' && req.method === 'GET') {
-        const username = req.headers['x-user-name'] as string
+        const reqUsername = (req.headers['x-user-name'] as string) || ''
+        const isPublic = !reqUsername || reqUsername === 'default'
+        let username = '_open'
+
+        if (!isPublic) {
+          const verified = verifyUserAuth(req)
+          if (!verified) {
+            res.writeHead(401, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
+            return
+          }
+          username = verified
+        }
         try {
           const stats = fileCache.getCacheStats(username)
           res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -1354,7 +1534,19 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
       }
 
       if (pathname === '/api/music/cache/clear' && req.method === 'POST') {
-        const username = req.headers['x-user-name'] as string
+        const reqUsername = (req.headers['x-user-name'] as string) || ''
+        const isPublic = !reqUsername || reqUsername === 'default'
+        let username = '_open'
+
+        if (!isPublic) {
+          const verified = verifyUserAuth(req)
+          if (!verified) {
+            res.writeHead(401, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
+            return
+          }
+          username = verified
+        }
         try {
           const result = fileCache.clearAllCache(username)
           res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -1367,7 +1559,19 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
       }
 
       if (pathname === '/api/music/cache/lyric/clear' && req.method === 'POST') {
-        const username = req.headers['x-user-name'] as string
+        const reqUsername = (req.headers['x-user-name'] as string) || ''
+        const isPublic = !reqUsername || reqUsername === 'default'
+        let username = '_open'
+
+        if (!isPublic) {
+          const verified = verifyUserAuth(req)
+          if (!verified) {
+            res.writeHead(401, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
+            return
+          }
+          username = verified
+        }
         try {
           const result = fileCache.clearLyricCache(username)
           res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -1395,7 +1599,19 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
       // 7. Get Detailed Cache List
       if (pathname === '/api/music/cache/list' && req.method === 'GET') {
-        const username = req.headers['x-user-name'] as string
+        const reqUsername = (req.headers['x-user-name'] as string) || ''
+        const isPublic = !reqUsername || reqUsername === 'default'
+        let username = '_open'
+
+        if (!isPublic) {
+          const verified = verifyUserAuth(req)
+          if (!verified) {
+            res.writeHead(401, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
+            return
+          }
+          username = verified
+        }
         void fileCache.getCacheList(username).then(list => {
           res.writeHead(200, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ success: true, data: list }))
@@ -1408,7 +1624,19 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
       // 8. Get Cache Cover
       if (pathname === '/api/music/cache/cover' && req.method === 'GET') {
-        const username = (req.headers['x-user-name'] as string) || urlObj.searchParams.get('user') || ''
+        const reqUsername = (req.headers['x-user-name'] as string) || urlObj.searchParams.get('user') || ''
+        const isPublic = !reqUsername || reqUsername === 'default'
+        let username = '_open'
+
+        if (!isPublic) {
+          const verified = verifyUserAuth(req)
+          if (!verified) {
+            res.writeHead(401)
+            res.end('Unauthorized')
+            return
+          }
+          username = verified
+        }
         const filename = urlObj.searchParams.get('filename')
         if (!filename) {
           res.writeHead(400)
@@ -1432,7 +1660,19 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
       // 9. Remove Cache File (Single or Batch)
       if (pathname === '/api/music/cache/remove' && req.method === 'POST') {
-        const username = req.headers['x-user-name'] as string
+        const reqUsername = (req.headers['x-user-name'] as string) || ''
+        const isPublic = !reqUsername || reqUsername === 'default'
+        let username = '_open'
+
+        if (!isPublic) {
+          const verified = verifyUserAuth(req)
+          if (!verified) {
+            res.writeHead(401, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
+            return
+          }
+          username = verified
+        }
         void readBody(req).then(body => {
           try {
             const { filenames } = JSON.parse(body)
@@ -1519,7 +1759,20 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
         const source = urlObj.searchParams.get('source')
         const songmid = urlObj.searchParams.get('songmid') || urlObj.searchParams.get('songId') || urlObj.searchParams.get('id')
         const songId = urlObj.searchParams.get('songId') || urlObj.searchParams.get('id')
-        const username = req.headers['x-user-name'] as string
+
+        const reqUsername = (req.headers['x-user-name'] as string) || ''
+        const isPublic = !reqUsername || reqUsername === 'default'
+        let username = '_open'
+
+        if (!isPublic) {
+          const verified = verifyUserAuth(req)
+          if (!verified) {
+            res.writeHead(401, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
+            return
+          }
+          username = verified
+        }
 
         if (!source || (!songmid && !songId)) {
           res.writeHead(400)
@@ -1542,7 +1795,19 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
         void readBody(req).then(body => {
           try {
             const { songInfo, lyricsObj } = JSON.parse(body)
-            const username = req.headers['x-user-name'] as string
+            const reqUsername = (req.headers['x-user-name'] as string) || ''
+            const isPublic = !reqUsername || reqUsername === 'default'
+            let username = '_open'
+
+            if (!isPublic) {
+              const verified = verifyUserAuth(req)
+              if (!verified) {
+                res.writeHead(401, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
+                return
+              }
+              username = verified
+            }
 
             if (!songInfo || !lyricsObj) {
               res.writeHead(400)
@@ -2129,6 +2394,19 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
       // [新增] 音乐 URL API
       if (pathname === '/api/music/url' && req.method === 'POST') {
         const clientUsername = req.headers['x-user-name'] as string | undefined
+
+        // 鉴权逻辑：如果提供了具名用户，必须通过 Token 或密码验证
+        let verifiedUsername = 'open' // userApi 中公开用户标识为 'open'
+        if (clientUsername && clientUsername !== 'default' && clientUsername !== 'open' && clientUsername !== '_open') {
+          const verified = verifyUserAuth(req)
+          if (!verified || verified !== clientUsername) {
+            res.writeHead(401, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
+            return
+          }
+          verifiedUsername = verified
+        }
+
         const clientId = req.headers['x-client-id'] as string | undefined
         const reqId = req.headers['x-req-id'] as string | undefined
 
@@ -2159,12 +2437,12 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
             let customSourceError: string | null = null
             let attempts: any[] = []
-            if (isSourceSupported(source, clientUsername)) {
+            if (isSourceSupported(source, verifiedUsername)) {
               try {
-                console.log(`[MusicUrl] Using custom source for: ${source} (ReqId: ${reqId || 'None'})`)
+                console.log(`[MusicUrl] Using custom source for: ${source} (ReqId: ${reqId || 'None'}, User: ${verifiedUsername})`)
 
                 const userApiResult = await callUserApiGetMusicUrl(
-                  source, songInfo, quality || '128k', clientUsername,
+                  source, songInfo, quality || '128k', verifiedUsername,
                   (attempt) => pushProgress(attempt)
                 )
                 result = userApiResult
@@ -3633,6 +3911,22 @@ export const startServer = async (port: number, ip: string) => {
     console.log('[Server] Custom user APIs initialized')
   } catch (err: any) {
     console.error('[Server] Failed to initialize user APIs:', err.message)
+  }
+
+  // [Fix] 服务启动时从 _open 用户 settings.json 读取 serverCacheLocation 并预初始化 fileCache，
+  // 避免前端初始化同步时因服务端内存状态（默认 'root'）与持久化设置不一致而触发权限检查返回 403
+  try {
+    const openUserSpace = getUserSpace('_open')
+    const settingsPath = path.join(openUserSpace.dataManage.userDir, File.userSettingsJSON)
+    if (fs.existsSync(settingsPath)) {
+      const savedSettings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+      if (savedSettings.serverCacheLocation) {
+        fileCache.setCacheLocation(savedSettings.serverCacheLocation)
+        console.log(`[Server] Restored fileCache location from settings: ${savedSettings.serverCacheLocation}`)
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Server] Failed to restore fileCache location:', err.message)
   }
 
   await handleStartServer(port, ip).then(() => {

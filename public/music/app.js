@@ -139,10 +139,27 @@ window.selectedSongObjects = new Map();
 let expandBtnTimeout = null; // 展开按钮淡化计时器
 let toggleLyricsBtnTimeout = null; // 歌词按钮淡化计时器
 
-// ===== 认证相关代码 (服务端 Cookie Session) =====
+// ===== 认证相关代码 (Player Cookie Session + User Token) =====
 let authEnabled = false;
-// authToken 保留用于 API 请求头 x-user-token（与播放器登录认证不同）
+// authToken 保留用于播放器登录 (player.password) 颁发的 session
 let authToken = sessionStorage.getItem('lx_player_auth');
+// 用户 Token：将明文密码传输改为 Token 验证
+let userToken = localStorage.getItem('lx_user_token');
+
+/**
+ * 生成用户 API 请求所需的认证 Headers。
+ * 优先使用 Token，若无 Token 则兼容旧的 x-user-password 方式。
+ */
+function getUserAuthHeaders() {
+    const username = currentListData?.username || localStorage.getItem('lx_sync_user') || '';
+    if (userToken) {
+        return { 'x-user-name': username, 'x-user-token': userToken };
+    }
+    // 兼容旧方式（自动登录流程会尝试获取 Token，此为局部调用后备）
+    const pass = localStorage.getItem('lx_sync_pass');
+    return username && pass ? { 'x-user-name': username, 'x-user-password': pass } : {};
+}
+window.getUserAuthHeaders = getUserAuthHeaders;
 
 // 页面加载时：检查是否开启认证，若开启则显示登出按钮
 (async () => {
@@ -164,6 +181,23 @@ let authToken = sessionStorage.getItem('lx_player_auth');
         // 获取到公共配置后，立即刷新一次 UI 状态 (管理员按钮/设置项禁用等)
         if (typeof syncSettingsUI === 'function') syncSettingsUI();
         else if (typeof updateAdminUI === 'function') updateAdminUI();
+
+        // [新增] 有 Token 时验证其有效性
+        if (userToken) {
+            try {
+                const vRes = await fetch('/api/user/auth/verify', {
+                    headers: { 'x-user-token': userToken }
+                });
+                const vData = await vRes.json();
+                if (!vData.valid) {
+                    console.log('[Auth] 用户 Token 已过期，已清除。如需使用账户功能请重新登录。');
+                    localStorage.removeItem('lx_user_token');
+                    userToken = null;
+                }
+            } catch (e) {
+                console.warn('[Auth] Token 验证失败:', e);
+            }
+        }
 
         // [新增] 公开受限用户自动尝试从服务器拉取配置 (_open)
         if (config['user.enablePublicRestriction']) {
@@ -986,7 +1020,7 @@ async function doSearch(page = 1, append = false) {
     try {
         const headers = {};
         if (typeof authToken !== 'undefined' && authToken) headers['x-user-token'] = authToken;
-        if (typeof currentListData !== 'undefined' && currentListData && currentListData.username) headers['x-user-name'] = currentListData.username;
+        Object.assign(headers, getUserAuthHeaders());
 
         let list = [];
         if (source === 'all') {
@@ -1763,12 +1797,8 @@ async function findOtherSourceMatch(song) {
 
     try {
         const query = `${song.name} ${song.singer}`;
-        const headers = {};
-        const authToken = sessionStorage.getItem('lx_player_auth');
-        if (authToken) headers['x-user-token'] = authToken;
-        if (typeof currentListData !== 'undefined' && currentListData && currentListData.username) {
-            headers['x-user-name'] = currentListData.username;
-        }
+        const headers = { 'Content-Type': 'application/json' };
+        Object.assign(headers, getUserAuthHeaders());
 
         showInfo('正在自动尝试换源匹配...');
 
@@ -1941,10 +1971,8 @@ async function fetchSongUrl(song, quality, isRetry = false, isSilent = false) {
     } catch (_) { }
 
     const headers = { 'Content-Type': 'application/json' };
-    if (typeof authToken !== 'undefined' && authToken) headers['x-user-token'] = authToken;
-    if (typeof currentListData !== 'undefined' && currentListData && currentListData.username) {
-        headers['x-user-name'] = currentListData.username;
-    }
+    // 携带认证信息 (Token 或密码)
+    Object.assign(headers, getUserAuthHeaders());
     headers['x-req-id'] = reqId;
 
     try {
@@ -2103,7 +2131,7 @@ async function checkServerCache(song, quality, exactQuality = false) {
         });
         if (exactQuality) params.append('exactQuality', '1');
         const headers = {};
-        if (username) headers['x-user-name'] = username;
+        Object.assign(headers, getUserAuthHeaders());
 
         const res = await fetch(`/api/music/cache/check?${params}`, { headers });
         if (res.ok) {
@@ -2186,7 +2214,7 @@ async function triggerServerCache(song, url, quality) {
         console.log('[ServerCache] Triggering background download for:', song.name);
         const username = currentListData?.username || '';
         const headers = { 'Content-Type': 'application/json' };
-        if (username) headers['x-user-name'] = username;
+        Object.assign(headers, getUserAuthHeaders());
 
         // 添加管理员验证 Header (如果已登录)
         const adminPass = localStorage.getItem('lx_admin_password');
@@ -2201,17 +2229,27 @@ async function triggerServerCache(song, url, quality) {
     } catch (e) { console.error('[ServerCache] Trigger failed:', e); }
 }
 
-function updateServerCacheConfig(location) {
+async function updateServerCacheConfig(location) {
     const headers = { 'Content-Type': 'application/json' };
+    // 携带 Token（或兼容旧密码），让服务端正确识别身份
+    Object.assign(headers, getUserAuthHeaders());
     const adminPass = localStorage.getItem('lx_admin_password');
     if (adminPass) headers['x-frontend-auth'] = adminPass;
 
-    fetch('/api/music/cache/config', {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({ location })
-    }).catch(e => console.error('[ServerCache] Config update failed:', e));
-    // 移除 UI 通知逻辑，因为此函数通常在初始化时静默运行
+    try {
+        const res = await fetch('/api/music/cache/config', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ location })
+        });
+        if (!res.ok) {
+            console.warn('[ServerCache] Config update failed:', res.status);
+            // 失败时回滚 UI，使前后端保持一致
+            if (typeof syncSettingsUI === 'function') syncSettingsUI('serverCacheLocation', settings.serverCacheLocation);
+        }
+    } catch (e) {
+        console.error('[ServerCache] Config update failed:', e);
+    }
 }
 window.updateServerCacheConfig = updateServerCacheConfig; // Expose global
 
@@ -2376,9 +2414,8 @@ async function playSong(song, index, forceQuality = null, noPlay = false, isRetr
         if (settings.enableServerLyricCache !== false && currentRawLrc) {
             try {
                 const _lyricHeaders = { 'Content-Type': 'application/json' };
-                const _authToken = sessionStorage.getItem('lx_player_auth') || localStorage.getItem('lx_player_auth');
-                if (_authToken) _lyricHeaders['x-user-token'] = _authToken;
-                if (currentListData?.username) _lyricHeaders['x-user-name'] = currentListData.username;
+                Object.assign(_lyricHeaders, getUserAuthHeaders());
+                // x-user-token 现在由 getUserAuthHeaders 统一管理
                 fetch(`${API_BASE}/cache/lyric`, {
                     method: 'POST',
                     headers: _lyricHeaders,
@@ -4037,7 +4074,7 @@ async function clearCache(type) {
         try {
             const username = (window.currentListData && window.currentListData.username) || localStorage.getItem('lx_sync_user') || '';
             const headers = {};
-            if (username) headers['x-user-name'] = username;
+            Object.assign(headers, getUserAuthHeaders());
 
             const res = await fetch('/api/music/cache/lyric/clear', { method: 'POST', headers });
             const data = await res.json();
@@ -4069,7 +4106,7 @@ async function updateServerCacheSize() {
 
         const username = (window.currentListData && window.currentListData.username) || localStorage.getItem('lx_sync_user') || '';
         const headers = {};
-        if (username) headers['x-user-name'] = username;
+        Object.assign(headers, getUserAuthHeaders());
         const response = await fetch('/api/music/cache/stats', { headers });
         if (!response.ok) {
             throw new Error('获取缓存统计失败');
@@ -4132,7 +4169,7 @@ async function refreshCacheList() {
     try {
         const username = (window.currentListData && window.currentListData.username) || localStorage.getItem('lx_sync_user') || '';
         const headers = {};
-        if (username) headers['x-user-name'] = username;
+        Object.assign(headers, getUserAuthHeaders());
 
         const res = await fetch('/api/music/cache/list', { headers });
         const data = await res.json();
@@ -4397,7 +4434,7 @@ async function removeCacheItem(filename) {
     try {
         const username = (window.currentListData && window.currentListData.username) || localStorage.getItem('lx_sync_user') || '';
         const headers = { 'Content-Type': 'application/json' };
-        if (username) headers['x-user-name'] = username;
+        Object.assign(headers, getUserAuthHeaders());
 
         const res = await fetch('/api/music/cache/remove', {
             method: 'POST',
@@ -4441,7 +4478,7 @@ async function batchDeleteCache() {
     try {
         const username = (window.currentListData && window.currentListData.username) || localStorage.getItem('lx_sync_user') || '';
         const headers = { 'Content-Type': 'application/json' };
-        if (username) headers['x-user-name'] = username;
+        Object.assign(headers, getUserAuthHeaders());
 
         const res = await fetch('/api/music/cache/remove', {
             method: 'POST',
@@ -4481,7 +4518,7 @@ async function clearServerCache() {
     try {
         const username = (window.currentListData && window.currentListData.username) || localStorage.getItem('lx_sync_user') || '';
         const headers = {};
-        if (username) headers['x-user-name'] = username;
+        Object.assign(headers, getUserAuthHeaders());
 
         const res = await fetch('/api/music/cache/clear', { method: 'POST', headers });
         if (res.ok) {
@@ -4665,8 +4702,7 @@ async function fetchLyric(song, quality = null) {
     // ===== 2. 尝试读取服务器端缓存歌词 =====
     const username = currentListData?.username || '';
     const headers = {};
-    if (typeof authToken !== 'undefined' && authToken) headers['x-user-token'] = authToken;
-    if (username) headers['x-user-name'] = username;
+    Object.assign(headers, getUserAuthHeaders());
 
     if (settings.enableServerLyricCache !== false) {
         try {
@@ -5404,25 +5440,23 @@ async function pushSettingsToServer() {
     // Only local sync mode supports this for now
     if (localStorage.getItem('lx_sync_mode') !== 'local' && !window.lx_config?.['user.enablePublicRestriction']) return;
 
-    let user = localStorage.getItem('lx_sync_user');
-    let pass = localStorage.getItem('lx_sync_pass');
-
-    // 如果是公开限制模式，且没有设置账号，使用默认值
-    if (!user && window.lx_config?.['user.enablePublicRestriction']) {
-        user = 'default';
-        pass = 'default';
-    }
-
-    if (!user || !pass) return;
+    const user = localStorage.getItem('lx_sync_user');
+    const isPublicMode = !user && window.lx_config?.['user.enablePublicRestriction'];
+    if (!user && !isPublicMode) return;
 
     try {
-        const headers = {
-            'Content-Type': 'application/json',
-            'x-user-name': user,
-            'x-user-password': pass
-        };
-        const adminPass = localStorage.getItem('lx_admin_password');
-        if (adminPass) headers['x-frontend-auth'] = adminPass;
+        const headers = { 'Content-Type': 'application/json' };
+        if (isPublicMode) {
+            // 公开受限用户：不需账号认证，但需要管理员密码
+            headers['x-user-name'] = 'default';
+            const adminPass = localStorage.getItem('lx_admin_password');
+            if (adminPass) headers['x-frontend-auth'] = adminPass;
+        } else {
+            // 已登录用户：使用 Token（或兼容旧密码）
+            Object.assign(headers, getUserAuthHeaders());
+            const adminPass = localStorage.getItem('lx_admin_password');
+            if (adminPass) headers['x-frontend-auth'] = adminPass;
+        }
 
         const res = await fetch('/api/user/settings', {
             method: 'POST',
@@ -5444,29 +5478,28 @@ async function pushSettingsToServer() {
 
 async function fetchSettingsFromServer() {
     if (!settings.saveAccountSettingsToFile) return;
-    let user = localStorage.getItem('lx_sync_user');
-    let pass = localStorage.getItem('lx_sync_pass');
 
-    // 如果是公开限制模式，且没有设置账号，使用默认值
-    if (!user && window.lx_config?.['user.enablePublicRestriction']) {
-        user = 'default';
-        pass = 'default';
-    }
-
-    if (!user || !pass) return;
+    const user = localStorage.getItem('lx_sync_user');
+    const isPublicMode = !user && window.lx_config?.['user.enablePublicRestriction'];
+    if (!user && !isPublicMode) return;
 
     try {
         console.log('[Settings] 正在从服务器尝试加载设置...');
-        const headers = {
-            'x-user-name': user,
-            'x-user-password': pass
-        };
-        const adminPass = localStorage.getItem('lx_admin_password');
-        if (adminPass) headers['x-frontend-auth'] = adminPass;
+        const headers = {};
+        if (isPublicMode) {
+            headers['x-user-name'] = 'default';
+            const adminPass = localStorage.getItem('lx_admin_password');
+            if (adminPass) headers['x-frontend-auth'] = adminPass;
+        } else {
+            Object.assign(headers, getUserAuthHeaders());
+            const adminPass = localStorage.getItem('lx_admin_password');
+            if (adminPass) headers['x-frontend-auth'] = adminPass;
+        }
 
         const res = await fetch('/api/user/settings', {
             headers: headers
         });
+
         if (res.ok) {
             const serverSettings = await res.json();
             console.log('[Settings] 从服务器加载设置成功:', serverSettings);
@@ -5508,6 +5541,18 @@ function updateSyncStatus(html, showLogout = true) {
 }
 
 async function handleSyncLogout() {
+    // [新增] 造访调用服务端注销 Token
+    if (userToken) {
+        try {
+            await fetch('/api/user/logout', {
+                method: 'POST',
+                headers: { 'x-user-token': userToken }
+            });
+        } catch (e) { console.warn('[Auth] Token 注销失败:', e); }
+        localStorage.removeItem('lx_user_token');
+        userToken = null;
+    }
+
     if (syncManager && syncManager.client && typeof syncManager.client.close === 'function') {
         syncManager.client.close();
     }
@@ -5560,6 +5605,26 @@ async function handleLocalLogin() {
 
         if (success) {
             statusEl.innerHTML = '<i class="fas fa-check-circle text-emerald-500"></i> 登录成功，正在同步...';
+
+            // [新增] 登录成功后获取 Token，替代明文密码传输
+            try {
+                const tokenRes = await fetch('/api/user/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: user, password: pass })
+                });
+                if (tokenRes.ok) {
+                    const tokenData = await tokenRes.json();
+                    if (tokenData.token) {
+                        userToken = tokenData.token;
+                        localStorage.setItem('lx_user_token', userToken);
+                        console.log('[Auth] 用户 Token 已获取并保存');
+                    }
+                }
+            } catch (e) {
+                console.warn('[Auth] Token 获取失败，将内容开旧式密码验证:', e);
+            }
+
             // Fetch List
             const listData = await syncManager.sync();
             currentListData = listData;
